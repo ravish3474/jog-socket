@@ -4,8 +4,8 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-// WebSocket Server
-const wss = new WebSocket.Server({ port: 3010 });
+// WebSocket Server (Separate Port)
+const wss = new WebSocket.Server({ port: 8080 });
 
 let connectedClient = null; // Track connected Java desktop app
 
