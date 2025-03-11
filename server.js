@@ -4,9 +4,10 @@ const express = require('express');
 const app = express();
 app.use(express.json());
 
-const wss = new WebSocket.Server({ port: 8080 });
+// WebSocket Server
+const wss = new WebSocket.Server({ port: 3000 });
 
-let connectedClient = null; // Track the connected Java desktop app
+let connectedClient = null; // Track connected Java desktop app
 
 wss.on('connection', ws => {
     console.log('Java Desktop App connected');
