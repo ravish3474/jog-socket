@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 
 // WebSocket Server
-const wss = new WebSocket.Server({ port: 3000 });
+const wss = new WebSocket.Server({ port: 3001 });
 
 let connectedClient = null; // Track connected Java desktop app
 
@@ -48,4 +48,4 @@ app.post('/send-files', (req, res) => {
 });
 
 // Start Express API
-app.listen(3000, () => console.log('Node.js API running on port 3000'));
+app.listen(3001, () => console.log('Node.js API running on port 3001'));
