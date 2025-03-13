@@ -25,7 +25,7 @@ wss.on('connection', ws => {
 
 // Endpoint to send file paths and IDs from PHP API to Java app
 app.post('/send-files', (req, res) => {
-    const { file_paths, file_ids } = req.body;
+    const { file_paths, file_ids ,order_code} = req.body;
 
     if (!file_paths || !file_ids || file_paths.length !== file_ids.length) {
         return res.status(400).json({
@@ -38,7 +38,8 @@ app.post('/send-files', (req, res) => {
         connectedClient.send(JSON.stringify({
             action: 'upload_files',
             file_paths,
-            file_ids
+            file_ids,
+            order_code
         }));
         console.log(`Emitted file paths: ${file_paths.join(', ')}`);
         res.json({ status: 'success', message: 'Data sent to Java app' });
