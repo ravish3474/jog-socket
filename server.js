@@ -48,5 +48,55 @@ app.post('/send-files', (req, res) => {
     }
 });
 
+//reprinr Notification 
+app.post('/send-reprint-notification', (req, res) => {
+    const { file_id, barcode, printer_name, note } = req.body;
+
+    if (!file_id || !barcode || !printer_name) {
+        return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
+    }
+
+    if (connectedClient) {
+        connectedClient.send(JSON.stringify({
+            action: 'reprint_notification',
+            file_id,
+            barcode,
+            printer_name,
+            note
+        }));
+        console.log(`Reprint notification sent: File ID ${file_id}, Barcode ${barcode}`);
+        res.json({ status: 'success', message: 'Reprint notification sent' });
+    } else {
+        res.status(500).json({ status: 'error', message: 'No Java app connected' });
+    }
+});
+
+// Endpoint to notify Java app of redesign request
+app.post('/notify-redesign', (req, res) => {
+    const { file_id, barcode, designer_id, designer_name, note } = req.body;
+
+    if (!file_id || !barcode || !designer_id || !designer_name) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Missing required parameters.'
+        });
+    }
+
+    if (connectedClient) {
+        connectedClient.send(JSON.stringify({
+            action: 'redesign_request',
+            file_id,
+            barcode,
+            designer_id,
+            designer_name,
+            note
+        }));
+        console.log(`Emitted redesign request for file ID: ${file_id}`);
+        res.json({ status: 'success', message: 'Redesign request sent to Java app' });
+    } else {
+        res.status(500).json({ status: 'error', message: 'No Java app connected' });
+    }
+});
+
 // Start Express API
 app.listen(3010, () => console.log('Node.js API running on port 3010'));
