@@ -1,89 +1,78 @@
 const WebSocket = require('ws');
 const express = require('express');
-
 const app = express();
 app.use(express.json());
 
-// WebSocket Server (Separate Port)
-const wss = new WebSocket.Server({ port: 8080 });
+const PORT_WS = 8080;
+const PORT_API = 3010;
 
-let connectedClient = null; // Track connected Java desktop app
+const wss = new WebSocket.Server({ port: PORT_WS });
+const clients = new Map(); // session_token => WebSocket
 
+// WebSocket Connection from Java App
 wss.on('connection', ws => {
-    console.log('Java Desktop App connected');
-    connectedClient = ws;
+    console.log('Java App connected. Awaiting session token...');
 
     ws.on('message', message => {
-        console.log(`Received from Java App: ${message}`);
+        try {
+            const data = JSON.parse(message);
+            if (data.session_token) {
+                clients.set(data.session_token, ws);
+                console.log(`Registered client with token: ${data.session_token}`);
+            } else {
+                console.log('Received message:', message);
+            }
+        } catch (err) {
+            console.log('Invalid JSON received:', message);
+        }
     });
 
     ws.on('close', () => {
-        console.log('Java Desktop App disconnected');
-        connectedClient = null;
+        for (const [token, client] of clients.entries()) {
+            if (client === ws) {
+                clients.delete(token);
+                console.log(`Client with token ${token} disconnected`);
+                break;
+            }
+        }
     });
 });
 
-// Endpoint to send file paths and IDs from PHP API to Java app
-app.post('/send-files', (req, res) => {
-    const { file_paths, file_ids ,order_code} = req.body;
+// API to Notify Java App for Reprint
+app.post('/notify-reprint', (req, res) => {
+    const { file_id, barcode, printer_id, printer_name, session_token } = req.body;
 
-    if (!file_paths || !file_ids || file_paths.length !== file_ids.length) {
-        return res.status(400).json({
-            status: 'error',
-            message: 'Invalid data. Ensure file paths and IDs are provided with matching lengths.'
-        });
-    }
-
-    if (connectedClient) {
-        connectedClient.send(JSON.stringify({
-            action: 'upload_files',
-            file_paths,
-            file_ids,
-            order_code
-        }));
-        console.log(`Emitted file paths: ${file_paths.join(', ')}`);
-        res.json({ status: 'success', message: 'Data sent to Java app' });
-    } else {
-        res.status(500).json({ status: 'error', message: 'No Java app connected' });
-    }
-});
-
-//reprinr Notification 
-app.post('/send-reprint-notification', (req, res) => {
-    const { file_id, barcode, printer_name, note } = req.body;
-
-    if (!file_id || !barcode || !printer_name) {
+    if (!file_id || !barcode || !printer_id || !printer_name || !session_token) {
         return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
     }
 
-    if (connectedClient) {
-        connectedClient.send(JSON.stringify({
-            action: 'reprint_notification',
+    const client = clients.get(session_token);
+    if (client) {
+        client.send(JSON.stringify({
+            action: 'reprint_request',
             file_id,
             barcode,
-            printer_name,
-            note
+            printer_id,
+            printer_name
         }));
-        console.log(`Reprint notification sent: File ID ${file_id}, Barcode ${barcode}`);
-        res.json({ status: 'success', message: 'Reprint notification sent' });
+        console.log(`Reprint request sent to ${printer_name}`);
+        res.json({ status: 'success', message: 'Reprint request sent' });
     } else {
-        res.status(500).json({ status: 'error', message: 'No Java app connected' });
+        res.status(500).json({ status: 'error', message: 'Target printer not connected' });
     }
 });
 
-// Endpoint to notify Java app of redesign request
+// API to Notify Java App for Redesign
 app.post('/notify-redesign', (req, res) => {
-    const { file_id, barcode, designer_id, designer_name, note } = req.body;
+    const { file_id, barcode, designer_id, designer_name, note, session_token } = req.body;
 
-    if (!file_id || !barcode || !designer_id || !designer_name) {
-        return res.status(400).json({
-            status: 'error',
-            message: 'Missing required parameters.'
-        });
+    if (!file_id || !barcode || !designer_id || !designer_name || !note || !session_token) {
+        return res.status(400).json({ status: 'error', message: 'Missing required parameters' });
     }
 
-    if (connectedClient) {
-        connectedClient.send(JSON.stringify({
+    const client = clients.get(session_token);
+    if (client) {
+        client.send(JSON.stringify({
             action: 'redesign_request',
             file_id,
             barcode,
@@ -91,12 +80,43 @@ app.post('/notify-redesign', (req, res) => {
             designer_name,
             note
         }));
-        console.log(`Emitted redesign request for file ID: ${file_id}`);
-        res.json({ status: 'success', message: 'Redesign request sent to Java app' });
+        console.log(`Redesign request sent to ${designer_name}`);
+        res.json({ status: 'success', message: 'Redesign request sent' });
     } else {
-        res.status(500).json({ status: 'error', message: 'No Java app connected' });
+        res.status(500).json({ status: 'error', message: 'Target designer not connected' });
     }
 });
 
-// Start Express API
-app.listen(3010, () => console.log('Node.js API running on port 3010'));
+// ✅ API to Send Files to a Specific Java App
+app.post('/send-files', (req, res) => {
+    const { file_paths, file_ids, order_code, session_token } = req.body;
+
+    if (!file_paths || !file_ids || !session_token || file_paths.length !== file_ids.length) {
+        return res.status(400).json({
+            status: 'error',
+            message: 'Invalid data. Ensure session_token, file paths and IDs are provided with matching lengths.'
+        });
+    }
+
+    const client = clients.get(session_token);
+    if (client) {
+        client.send(JSON.stringify({
+            action: 'upload_files',
+            file_paths,
+            file_ids,
+            order_code
+        }));
+        console.log(`Emitted file paths: ${file_paths.join(', ')} to token: ${session_token}`);
+        res.json({ status: 'success', message: 'Data sent to Java app' });
+    } else {
+        res.status(500).json({ status: 'error', message: 'Target client not connected' });
+    }
+});
+
+// Start REST API Server
+app.listen(PORT_API, () => {
+    console.log(`Express API listening on port ${PORT_API}`);
+});
+
+// Start WebSocket Server
+console.log(`WebSocket server listening on port ${PORT_WS}`);
